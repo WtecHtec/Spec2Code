@@ -333,7 +333,7 @@ function SidePanelContent() {
                   variant="default"
                   size="sm"
                   title="清除"
-                  onClick={() => setPrd("")}>
+                  onClick={() => setDesignDoc("")}>
                   <IconBackspace style={{ width: "70%" }} />
                 </ActionIcon>
               </Group>
