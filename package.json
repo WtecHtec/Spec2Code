@@ -2,7 +2,7 @@
   "name": "spec2-code",
   "displayName": "Spec2 code",
   "version": "0.0.1",
-  "description": "A basic Plasmo extension.",
+  "description": "从规范（Spec）到代码，直击核心流程（PRD ➝ API ➝ Code）。",
   "author": "wtechtec@gmail.com",
   "scripts": {
     "dev": "plasmo dev",
