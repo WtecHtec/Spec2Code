@@ -22,7 +22,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       // 模拟用户输入
       const p = inputElement.querySelector('p');
       if (p) {
-        p.textContent = request.data;
+        p.textContent = request.data
       } else {
         // 备用方案，如果内部结构变化
         (inputElement as HTMLElement).innerText = request.data;
@@ -32,8 +32,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       // 注意：需要确保按钮是可点击状态
       setTimeout(() => {
         (sendButton as HTMLButtonElement).click();
-        sendResponse({ status: "success" });
-      }, 500); // 短暂延迟确保输入事件被处理
+        setTimeout(() => {
+            sendResponse({ status: "success", data: request.data, title: request.title, mode: "gemini", url: window.location.href });
+        }, 1000 * 10);
+      }, 1000); // 短暂延迟确保输入事件被处理
 
     } else {
       console.error("Could not find Gemini input or send button.");

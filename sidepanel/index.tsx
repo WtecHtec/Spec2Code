@@ -38,22 +38,30 @@ import {
 } from "@tabler/icons-react"
 import toast, { Toaster } from "react-hot-toast"
 
+import dayjs from "dayjs"
+
 import { DEFAULT_TEMPLATE } from "~config"
 
 // 定义历史记录条目的类型
 interface HistoryEntry {
-  context: string
-  prd: string
-  designDoc: string
-  userPrompt: string
+  context?: string
+  prd?: string
+  designDoc?: string
+  title: string
   timestamp: string
+  mode: string
+  url: string
 }
 
 // 创建一个基础主题
 const theme = createTheme({})
 
 // 用于向 Content Script 发送消息的辅助函数
-async function sendDataToAiTab(provider: "gemini" | "openai", data: string) {
+async function sendDataToAiTab(
+  provider: "gemini" | "openai",
+  data: string,
+  userPrompt: string
+) {
   const providerConfig = AI_PROVIDERS[provider]
   if (!providerConfig) {
     console.error("Invalid AI provider selected")
@@ -78,12 +86,23 @@ async function sendDataToAiTab(provider: "gemini" | "openai", data: string) {
   }
 
   // 确保脚本已注入再发送消息
-  setTimeout(() => {
-    chrome.tabs.sendMessage(targetTab.id, {
-      type: "FILL_AND_SUBMIT",
-      data: data
-    })
-  }, 500)
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      chrome.tabs
+        .sendMessage(targetTab.id, {
+          type: "FILL_AND_SUBMIT",
+          data: data,
+          title:  userPrompt
+        })
+        .then((res) => {
+          console.log("data::", res)
+          resolve(res)
+        })
+        .catch(() => {
+          resolve(null)
+        })
+    }, 500)
+  })
 }
 
 const AI_PROVIDERS = {
@@ -157,10 +176,10 @@ function SidePanelContent() {
   }
   const handleSend = async () => {
     if (
-      !context.trim() &&
-      !prd.trim() &&
-      !designDoc.trim() &&
-      !userPrompt.trim()
+      !context?.trim() &&
+      !prd?.trim() &&
+      !designDoc?.trim() &&
+      !userPrompt?.trim()
     ) {
       toast.error("请输入至少一项内容后再发送。")
       return
@@ -175,10 +194,28 @@ function SidePanelContent() {
       .replace(/\$\{userPrompt\}/g, userPrompt)
 
     console.log("Sending data...", fullPrompt)
-    await sendDataToAiTab(aiProvider, fullPrompt)
+    const res = (await sendDataToAiTab(
+      aiProvider,
+      fullPrompt,
+      userPrompt
+    )) as any
+    if (res) {
+      const { url, title: userPrompt, data, mode } = res
+      let title = data?.substring(0, 10)
+      if (userPrompt) {
+        title = userPrompt?.substring(0, 10)
+      }
+      setHistory(( per ) => [ {
+        title,
+        timestamp: dayjs().format('YYYY-MM-DD HH:mm:ss'),
+        mode,
+        url,
+      }, ...per].slice(0, 50) as any[])
+    }
   }
   const restoreFromHistory = (entry: HistoryEntry) => {
     /* ... */
+    window.open(entry.url, "_blank")
   }
 
   useEffect(() => {
@@ -313,7 +350,6 @@ function SidePanelContent() {
             <Divider my="xs" label="客户任务(TASK)" labelPosition="center" />
 
             <Textarea
-              label="客户任务"
               autosize
               minRows={3}
               maxRows={3}
@@ -330,7 +366,11 @@ function SidePanelContent() {
             </Button>
             <Divider my="xs" label="配置" labelPosition="center" />
             {/* 功能 3: 模板选择器 */}
-            <Button variant="default" onClick={() => { chrome.runtime.openOptionsPage()}}>
+            <Button
+              variant="default"
+              onClick={() => {
+                chrome.runtime.openOptionsPage()
+              }}>
               管理模板
             </Button>
           </Stack>
@@ -354,7 +394,7 @@ function SidePanelContent() {
                     onClick={() => restoreFromHistory(entry)}
                     style={{ textAlign: "left", width: "100%" }}>
                     <Text truncate fw={500}>
-                      {entry.userPrompt || "无提示词"}
+                      {entry.title || "无提示词"}
                     </Text>
                     <Text size="xs" c="dimmed">
                       {entry.timestamp}

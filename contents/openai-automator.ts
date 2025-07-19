@@ -29,7 +29,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         ;(textArea as HTMLElement).innerText = request.data
       }
       // 3. 模拟用户输入
-      textArea.value = request.data
+      textArea.value = request.data?.data
       textArea.dispatchEvent(new Event("input", { bubbles: true })) // 触发 input 事件，告知 React 状态已更新
       textArea.focus()
 
@@ -39,8 +39,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             'button[data-testid="send-button"]'
           ) as HTMLButtonElement
         sendButton.click()
-        sendResponse({ status: "success" })
-      }, 500)
+        setTimeout( () => {
+            sendResponse({ status: "success", data: request.data, title: request.title, mode: "gemini", url: window.location.href })
+        }, 1000 * 10)
+       
+      }, 1000)
     } else {
       console.error("Could not find OpenAI textarea or send button.")
       if (!textArea) console.error("Textarea not found!")
