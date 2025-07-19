@@ -1,33 +1,59 @@
-This is a [Plasmo extension](https://docs.plasmo.com/) project bootstrapped with [`plasmo init`](https://www.npmjs.com/package/plasmo).
+# Spec2Code Chrome 插件
 
-## Getting Started
+Spec2Code 是一个面向产品/研发/设计协作的 Chrome 插件，帮助你快速整理上下文、需求（PRD）、接口设计（API），并一键发送到 Gemini 或 OpenAI Copilot 进行智能处理。
 
-First, run the development server:
+## 功能简介
 
-```bash
-pnpm dev
-# or
-npm run dev
-```
+1. **侧边栏输入与管理**
+   - 支持输入/粘贴/上传文件作为上下文（Context）。
+   - 分栏输入需求（PRD）、接口设计（API）、客户任务（Task）。
+   - 可通过模板自定义 Prompt 结构。
 
-Open your browser and load the appropriate development build. For example, if you are developing for the chrome browser, using manifest v3, use: `build/chrome-mv3-dev`.
+2. **AI Copilot 集成**
+   - 一键选择 Gemini 或 OpenAI 作为 Copilot。
+   - 自动拼接模板内容，发送到对应 AI 聊天页面，并自动填充 Prompt。
 
-You can start editing the popup by modifying `popup.tsx`. It should auto-update as you make changes. To add an options page, simply add a `options.tsx` file to the root of the project, with a react component default exported. Likewise to add a content page, add a `content.ts` file to the root of the project, importing some module and do some logic, then reload the extension on your browser.
+3. **历史记录**
+   - 自动保存最近 50 条操作历史，支持点击历史记录快速恢复并跳转到对应 AI 页面。
 
-For further guidance, [visit our Documentation](https://docs.plasmo.com/)
+4. **右键菜单增强**
+   - 选中文本后，右键可直接设为 PRD 或接口设计，自动填充到侧边栏对应区域。
 
-## Making production build
+5. **模板管理**
+   - 支持自定义 Prompt 模板，可在“管理模板”页面进行增删改。
 
-Run the following:
+## 安装与使用
 
-```bash
-pnpm build
-# or
-npm run build
-```
+1. **加载插件**
+   - 在 Chrome 扩展管理页面（chrome://extensions）选择“加载已解压的扩展程序”，选择本项目文件夹。
 
-This should create a production bundle for your extension, ready to be zipped and published to the stores.
+2. **打开侧边栏**
+   - 点击浏览器工具栏插件图标，或通过右键菜单自动打开。
 
-## Submit to the webstores
+3. **输入内容**
+   - 在侧边栏输入或上传上下文、需求、接口设计等内容。
+   - 可通过右键菜单快速填充 PRD/API。
 
-The easiest way to deploy your Plasmo extension is to use the built-in [bpp](https://bpp.browser.market) GitHub action. Prior to using this action however, make sure to build your extension and upload the first version to the store to establish the basic credentials. Then, simply follow [this setup instruction](https://docs.plasmo.com/framework/workflows/submit) and you should be on your way for automated submission!
+4. **选择 AI Copilot 并发送**
+   - 选择 Gemini 或 OpenAI，点击“发送”按钮，自动跳转并填充 Prompt。
+
+5. **管理模板**
+   - 点击“管理模板”按钮，进入模板管理页面，自定义你的 Prompt 模板。
+
+6. **查看历史**
+   - 点击历史按钮，查看并快速恢复历史操作。
+
+## 技术栈
+
+- React + Mantine UI
+- Plasmo（Chrome 扩展开发框架）
+- TypeScript
+- dayjs、react-hot-toast 等
+
+## 贡献与反馈
+
+欢迎提交 Issue 或 PR 进行功能建议与问题反馈！
+
+---
+
+> 本插件仅用于学习与个人效率提升，请勿用于非法用途。
