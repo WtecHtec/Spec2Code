@@ -382,9 +382,9 @@ function SidePanelContent() {
           title="操作历史"
           position="right">
           <ScrollArea h="calc(100vh - 60px)">
-            {history.length > 0 ? (
+            {history?.length > 0 ? (
               <Stack>
-                {history.map((entry, index) => (
+                {history?.map((entry, index) => (
                   <Card
                     withBorder
                     key={index}
