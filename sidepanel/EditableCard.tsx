@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 
 // Mantine 和图标库的导入
@@ -14,7 +14,8 @@ import {
   IconSparkles,      // 优化图标
   IconArrowsMaximize,  // 缩放图标
   IconBackspace,
-  IconArrowsMinimize,             // 清除图标
+  IconArrowsMinimize,
+  IconFolderOpen,             // 清除图标
 } from '@tabler/icons-react';
 
 // 定义组件的 Props 接口
@@ -25,6 +26,7 @@ interface EditableCardProps {
   onValueChange: (value: string) => void;
   onClear: () => void;
   optimizing: boolean;
+  canSelectFile: boolean;
   onZoom?: () => void;
   minRows?: number;
   children?: React.ReactNode; // 用于传递额外的按钮，如“选择文件夹”
@@ -44,12 +46,42 @@ export function EditableCard({
   onZoom,
   minRows = 4,
   optimizing = false,
+  canSelectFile = false,
   children,
  
 }: EditableCardProps): JSX.Element {
   // 用于“优化”功能的加载状态
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [maxRows, setMaxRows] = useState(minRows);
+
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const handleFolderSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files
+    if (!files) return
+    let allContent = value
+    let pending = files.length
+    for (const file of files) {
+      const reader = new FileReader()
+      reader.onload = (e) => {
+        allContent += `--- File: ${file.name} ---\n${e.target.result}\n\n`
+        pending--
+        if (pending === 0) {
+          fileInputRef.current.value = ""
+          onValueChange(allContent)
+        }
+      }
+      reader.onerror = () => {
+        console.error(`Error reading file: ${file.name}`)
+        pending--
+        if (pending === 0) {
+          fileInputRef.current.value = ""
+          onValueChange(allContent)
+        }
+      }
+      reader.readAsText(file)
+    }
+  }
 
   // 点击“优化”按钮的处理函数
   const handleOptimize = async () => {
@@ -107,10 +139,25 @@ export function EditableCard({
           {/* 右上角的操作图标组 */}
           <Group gap="xs">
             {children} {/* 渲染父组件传递的额外按钮 */}
+            {
+               canSelectFile &&    <ActionIcon
+                   variant="default"
+                   size="sm"
+                   onClick={() => fileInputRef.current?.click()}>
+                   <IconFolderOpen style={{ width: "70%" }} />
+                   <input
+                     type="file"
+                     ref={fileInputRef}
+                     style={{ display: "none" }}
+                     multiple
+                     onChange={handleFolderSelect}
+                   />
+                 </ActionIcon>
+            }
             
             {/* 优化按钮 */}
             { 
-                optimizing &&   <ActionIcon
+                optimizing &&  <ActionIcon
                 title="优化内容"
                 variant="default"
                 size="sm"

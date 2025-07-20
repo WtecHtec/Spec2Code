@@ -1,21 +1,27 @@
-// sidepanel.tsx
+// sidepanel.tsx (最终完整版)
 
+import { useLiveQuery } from "dexie-react-hooks"
 import React, { useEffect, useRef, useState } from "react"
+import toast, { Toaster } from "react-hot-toast"
 
 import { useStorage } from "@plasmohq/storage/hook"
 
-// 1. 导入 Mantine 组件和样式
+// 数据库服务和类型定义
+import { db, populateDefaultTemplate } from "../lib/db"
+// Mantine UI 框架和图标库
 import "@mantine/core/styles.css"
 
 import {
   ActionIcon,
   AppShell,
+  Badge,
   Button,
   Card,
   createTheme,
   Divider,
   Drawer,
   Group,
+  Loader,
   MantineProvider,
   Modal,
   ScrollArea,
@@ -24,56 +30,60 @@ import {
   Stack,
   Text,
   Textarea,
-  TextInput,
   Title
 } from "@mantine/core"
-// 2. 导入图标
 import {
-  IconBackspace,
-  IconFile,
+  IconArrowsMaximize,
   IconFolderOpen,
   IconHistory,
-  IconPlus,
   IconSend,
-  IconTrash
+  IconSettings,
+  IconSparkles,
+  IconX
 } from "@tabler/icons-react"
 import dayjs from "dayjs"
-import toast, { Toaster } from "react-hot-toast"
 
 import { DEFAULT_TEMPLATE } from "~config"
 
-import { EditableCard } from "./EditableCard"
+import { EditableCard } from "./EditableCard" // 将 EditableCard 移至独立文件
 
-// 定义历史记录条目的类型
-interface HistoryEntry {
-  context?: string
-  prd?: string
-  designDoc?: string
-  title: string
-  timestamp: string
-  mode: string
-  url: string
+// ========================================================================
+// 辅助函数
+// ========================================================================
+
+const AI_PROVIDERS = {
+  gemini: {
+    name: "Gemini",
+    url: "https://gemini.google.com/*",
+    createUrl: "https://gemini.google.com/"
+  },
+  openai: {
+    name: "OpenAI",
+    url: "https://chat.openai.com/*",
+    createUrl: "https://chat.openai.com/"
+  }
 }
 
-// 创建一个基础主题
-const theme = createTheme({})
+const readFileAsText = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result as string)
+    reader.onerror = () => reject(reader.error)
+    reader.readAsText(file, "UTF-8")
+  })
+}
 
-// 用于向 Content Script 发送消息的辅助函数
 async function sendDataToAiTab(
   provider: "gemini" | "openai",
   data: string,
   userPrompt: string
-) {
+): Promise<boolean> {
   const providerConfig = AI_PROVIDERS[provider]
-  if (!providerConfig) {
-    console.error("Invalid AI provider selected")
-    return
-  }
+  const tabs = await chrome.tabs.query({ url: providerConfig.url })
   let targetTab = null
 
   if (!targetTab) {
     targetTab = await chrome.tabs.create({ url: providerConfig.createUrl })
-    // 等待新标签页加载完成
     await new Promise((resolve) => {
       const listener = (tabId, info) => {
         if (info.status === "complete" && tabId === targetTab.id) {
@@ -87,7 +97,6 @@ async function sendDataToAiTab(
     await chrome.tabs.update(targetTab.id, { active: true })
   }
 
-  // 确保脚本已注入再发送消息
   return new Promise((resolve) => {
     setTimeout(() => {
       chrome.tabs
@@ -107,102 +116,67 @@ async function sendDataToAiTab(
   })
 }
 
-const AI_PROVIDERS = {
-  gemini: {
-    name: "Gemini",
-    url: "https://gemini.google.com/*",
-    createUrl: "https://gemini.google.com/"
-  },
-  openai: {
-    name: "OpenAI",
-    url: "https://chat.openai.com/*",
-    createUrl: "https://chat.openai.com/"
-  }
-}
-
+// ========================================================================
 // 主 UI 组件
+// ========================================================================
 function SidePanelContent() {
-  //   const [context, setContext] = useStorage<string>("persistent-context", "");
-  const [context, setContext] = useState<string>("")
-  const [prd, setPrd] = useState("")
-  const [designDoc, setDesignDoc] = useState("")
-  const [userPrompt, setUserPrompt] = useState("")
-  const fileInputRef = useRef<HTMLInputElement>(null)
-
-  const [aiProvider, setAiProvider] = useStorage<"gemini" | "openai">(
-    "ai-provider",
-    "gemini" // 默认选项
-  )
-
-  const [history, setHistory] = useStorage<HistoryEntry[]>(
-    "operation-history",
-    []
-  )
+  // --- 状态管理 ---
   const [isHistoryOpen, setIsHistoryOpen] = useState(false)
-
-  // --- 模板 State ---
-  const [templates, setTemplates] = useStorage("prompt-templates", [
-    DEFAULT_TEMPLATE
-  ])
+  const templates = useLiveQuery(() => db.templates.toArray())
   const [activeTemplateId, setActiveTemplateId] = useStorage<string>(
     "active-template-id",
     DEFAULT_TEMPLATE.id
   )
+  const [history, setHistory] = useStorage<any[]>("operation-history", [])
+  const [aiProvider, setAiProvider] = useStorage<"gemini" | "openai">(
+    "ai-provider",
+    "gemini"
+  )
 
-  // ... 其他业务逻辑函数 (handleFolderSelect, handleSend, restoreFromHistory) 保持不变 ...
-  const handleFolderSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = event.target.files
-    if (!files) return
-    let allContent = context
-    let pending = files.length
-    for (const file of files) {
-      const reader = new FileReader()
-      reader.onload = (e) => {
-        allContent += `--- File: ${file.name} ---\n${e.target.result}\n\n`
-        pending--
-        if (pending === 0) {
-          fileInputRef.current.value = ""
-          setContext(allContent)
-        }
-      }
-      reader.onerror = () => {
-        console.error(`Error reading file: ${file.name}`)
-        pending--
-        if (pending === 0) {
-          fileInputRef.current.value = ""
-          setContext(allContent)
-        }
-      }
-      reader.readAsText(file)
+  const [fieldValues, setFieldValues] = useState<{ [key: string]: string }>({})
+  const [userPrompt, setUserPrompt] = useState("")
+
+  const activeTemplate =
+    templates?.find((t) => t.id === activeTemplateId) || templates?.[0]
+
+  // 当模板切换时，重置字段的值
+  useEffect(() => {
+    if (activeTemplate) {
+      const newFieldValues: { [key: string]: string } = {}
+      activeTemplate.fields.forEach((field) => {
+        newFieldValues[field.key] = ""
+      })
+      setFieldValues(newFieldValues)
     }
+  }, [activeTemplateId, templates])
+
+  // --- 事件处理函数 ---
+  const handleFieldValueChange = (key: string, value: string) => {
+    setFieldValues((prev) => ({ ...prev, [key]: value }))
   }
+
   const handleSend = async () => {
-    if (
-      !context?.trim() &&
-      !prd?.trim() &&
-      !designDoc?.trim() &&
-      !userPrompt?.trim()
-    ) {
+    const allInputs = [...Object.values(fieldValues), userPrompt]
+      .join("")
+      .trim()
+    if (!allInputs) {
       toast.error("请输入至少一项内容后再发送。")
       return
     }
-    // 功能 3: 使用模板生成 fullPrompt
-    const activeTemplate =
-      templates.find((t) => t.id === activeTemplateId) || DEFAULT_TEMPLATE
-    const fullPrompt = activeTemplate.content
-      .replace(/\$\{context\}/g, context)
-      .replace(/\$\{prd\}/g, prd)
-      .replace(/\$\{designDoc\}/g, designDoc)
-      .replace(/\$\{userPrompt\}/g, userPrompt)
 
-    console.log("Sending data...", fullPrompt)
-    const res = (await sendDataToAiTab(
-      aiProvider,
-      fullPrompt,
-      userPrompt
-    )) as any
+    let fullPrompt = activeTemplate.content
+    for (const key in fieldValues) {
+      fullPrompt = fullPrompt.replace(
+        new RegExp(`\\$\\{${key}\\}`, "g"),
+        fieldValues[key]
+      )
+    }
+    fullPrompt = fullPrompt.replace(/\$\{userPrompt\}/g, userPrompt)
+
+    const res = await sendDataToAiTab(aiProvider, fullPrompt, userPrompt)
+
     if (res) {
-      const { url, title: userPrompt, data, mode } = res
+      const { url, title: userPrompt, data, mode } = res as any
       let title = data?.substring(0, 10)
       if (userPrompt) {
         title = userPrompt?.substring(0, 10)
@@ -219,195 +193,170 @@ function SidePanelContent() {
             ...per
           ].slice(0, 50) as any[]
       )
+    } else {
+      toast.error("发送失败，请确保目标页面已打开并刷新。")
     }
   }
-  const restoreFromHistory = (entry: HistoryEntry) => {
+
+  const restoreFromHistory = (entry) => {
     /* ... */
     window.open(entry.url, "_blank")
   }
 
   useEffect(() => {
-    const messageListener = (request, sender, sendResponse) => {
-      if (request.type === "UPDATE_FROM_CONTEXT_MENU") {
-        if (request.field === "prd") {
-          setPrd(request.data)
-        } else if (request.field === "designDoc") {
-          setDesignDoc(request.data)
-        }
-      }
-    }
-    chrome.runtime.onMessage.addListener(messageListener)
-    return () => {
-      chrome.runtime.onMessage.removeListener(messageListener)
-    }
+    populateDefaultTemplate()
   }, [])
+  // --- 渲染 ---
+  if (!templates || !activeTemplate) {
+    return (
+      <Group justify="center" p="xl">
+        <Loader />
+      </Group>
+    )
+  }
 
   return (
     <>
       <AppShell header={{ height: 60 }} padding="md">
         <AppShell.Header>
           <Group justify="space-between" h="100%" px="md">
-            {/* <Title order={3}>Gemini Copilot</Title> */}
-            <SegmentedControl
-              value={aiProvider}
-              onChange={(value: "gemini" | "openai") => setAiProvider(value)}
-              data={[
-                { label: "Gemini Copilot", value: "gemini" },
-                { label: "OpenAI Copilot", value: "openai" }
-              ]}
+            <Select
+              data={templates.map((t) => ({
+                value: t.id,
+                label: t.name || "-"
+              }))}
+              value={activeTemplateId}
+              onChange={(value) => setActiveTemplateId(value)}
             />
-            <Group>
-              <Select
-                data={templates.map((t) => ({ value: t.id, label: t.name }))}
-                value={activeTemplateId}
-                onChange={(value) => setActiveTemplateId(value)}
-              />
-              <ActionIcon
-                variant="default"
-                size="lg"
-                onClick={() => setIsHistoryOpen(true)}
-                title="查看历史记录">
-                <IconHistory style={{ width: "70%", height: "70%" }} />
-              </ActionIcon>
-            </Group>
+            <ActionIcon
+              variant="default"
+              size="lg"
+              title="查看历史记录"
+              onClick={() => setIsHistoryOpen(true)}>
+              <IconHistory style={{ width: "70%", height: "70%" }} />
+            </ActionIcon>
           </Group>
         </AppShell.Header>
 
         <AppShell.Main>
           <Stack gap="lg">
-            <EditableCard
-              title="资源&规范(CONTEXT)"
-              description="在此输入上下文，或选择文件夹"
-              value={context}
-              onValueChange={setContext}
-              onClear={() => setContext("")}
-              optimizing={false}
-              onZoom={() => {}}>
-              {/* 这里可以传入一个“选择文件夹”的按钮作为 children */}
-              <ActionIcon
-                variant="default"
-                size="sm"
-                onClick={() => fileInputRef.current?.click()}>
-                <IconFolderOpen style={{ width: "70%" }} />
-                <input
-                      type="file"
-                      ref={fileInputRef}
-                      style={{ display: "none" }}
-                      multiple
-                      onChange={handleFolderSelect}
-                    />
-              </ActionIcon>
-            </EditableCard>
+            {activeTemplate.fields.map((field) => (
+              <EditableCard
+                key={field.id}
+                title={field.name}
+                description={field.description}
+                value={fieldValues[field.key] || ""}
+                onValueChange={(newValue) =>
+                  handleFieldValueChange(field.key, newValue)
+                }
+                onClear={() => handleFieldValueChange(field.key, "")}
+                canSelectFile={field.canSelectFile ?? false}
+                optimizing={field.canOptimize ?? false}
+              />
+            ))}
 
-      
-
-            <EditableCard
-              title="需求(PRD)"
-              description="在此输入需求内容、或者在网页后选择右击点击(Spec2 code)菜单"
-              value={prd}
-              onValueChange={setPrd}
-              onClear={() => setPrd("")}
-              optimizing={true}
-              onZoom={() => {}}>
-              {/* 这里可以传入一个“选择文件夹”的按钮作为 children */}
-          
-            </EditableCard>
-
-
-
-       
-
-            <EditableCard
-              title="接口文档(API)"
-              description="在此输入接口文档、或者在网页后选择右击点击(Spec2 code)菜单"
-              value={designDoc}
-              onValueChange={setDesignDoc}
-              onClear={() => setDesignDoc("")}
-              optimizing={true}
-              onZoom={() => {}}>
-              {/* 这里可以传入一个“选择文件夹”的按钮作为 children */}
-          
-            </EditableCard>
-
-         
-
-            <Divider my="xs" label="客户任务(TASK)" labelPosition="center" />
+            <Divider my="xs" label="最终指令" labelPosition="center" />
 
             <Textarea
+              label="用户指令 (userPrompt)"
+              placeholder="请输入最终的指令..."
               autosize
               minRows={3}
-              maxRows={3}
               value={userPrompt}
               onChange={(e) => setUserPrompt(e.currentTarget.value)}
             />
 
-            <Button
-              fullWidth
-              size="lg"
-              leftSection={<IconSend size={18} />}
-              onClick={handleSend}>
-              发送到 {AI_PROVIDERS[aiProvider].name}
-            </Button>
-            <Divider my="xs" label="配置" labelPosition="center" />
-            {/* 功能 3: 模板选择器 */}
-            <Button
-              variant="default"
-              onClick={() => {
-                chrome.runtime.openOptionsPage()
-              }}>
-              管理模板
-            </Button>
-          </Stack>
-        </AppShell.Main>
+            <Stack gap="xs" mt="md">
+              <SegmentedControl
+                fullWidth
+                value={aiProvider}
+                onChange={(value: "gemini" | "openai") => setAiProvider(value)}
+                data={[
+                  { label: "Gemini", value: "gemini" },
+                  { label: "OpenAI", value: "openai" }
+                ]}
+              />
 
-        <Drawer
-          opened={isHistoryOpen}
-          onClose={() => setIsHistoryOpen(false)}
-          title="操作历史"
-          position="right">
-          <ScrollArea h="calc(100vh - 60px)">
-            {history?.length > 0 ? (
-              <Stack>
-                {history?.map((entry, index) => (
-                  <Card
-                    withBorder
-                    key={index}
-                    p="sm"
-                    radius="md"
-                    component="button"
-                    onClick={() => restoreFromHistory(entry)}
-                    style={{ textAlign: "left", width: "100%" }}>
-                    <Text truncate fw={500}>
-                      {entry.title || "无提示词"}
-                    </Text>
-                    <Text size="xs" c="dimmed">
-                      {entry.timestamp}
-                    </Text>
-                  </Card>
-                ))}
-              </Stack>
-            ) : (
-              <Text c="dimmed" ta="center">
-                暂无历史记录
-              </Text>
-            )}
-          </ScrollArea>
-        </Drawer>
+              <Button
+                fullWidth
+                size="lg"
+                leftSection={<IconSend size={18} />}
+                onClick={handleSend}>
+                发送到 {AI_PROVIDERS[aiProvider].name}
+              </Button>
+
+              <Group grow>
+                <Button
+                  variant="default"
+                  mt="auto"
+                  onClick={() => chrome.runtime.openOptionsPage()}>
+                  <IconSettings size={16} style={{ marginRight: "8px" }} />{" "}
+                  管理模板
+                </Button>
+              </Group>
+            </Stack>
+          </Stack>
+
+          <Drawer
+            opened={isHistoryOpen}
+            onClose={() => setIsHistoryOpen(false)}
+            title="操作历史"
+            position="right">
+            <ScrollArea h="calc(100vh - 60px)">
+              {history?.length > 0 ? (
+                <Stack>
+                  {history?.map((entry, index) => (
+                    <Card
+                      withBorder
+                      key={index}
+                      p="sm"
+                      radius="md"
+                      component="button"
+                      onClick={() => restoreFromHistory(entry)}
+                      style={{ textAlign: "left", width: "100%" }}>
+                      <Group>
+                        {entry.mode && (
+                          <Badge
+                         
+                            variant="gradient"
+                            gradient={{ from: "blue", to: "cyan", deg: 90 }}>
+                            {entry.mode}
+                          </Badge>
+                        )}
+                        <Text truncate fw={500}>
+                          {entry.title || "无提示词"}
+                        </Text>
+                      </Group>
+
+                      <Text size="xs" c="dimmed">
+                        {entry.timestamp}
+                      </Text>
+                    </Card>
+                  ))}
+                </Stack>
+              ) : (
+                <Text c="dimmed" ta="center">
+                  暂无历史记录
+                </Text>
+              )}
+            </ScrollArea>
+          </Drawer>
+        </AppShell.Main>
       </AppShell>
     </>
   )
 }
 
-// 这是包装器组件，用于提供 Mantine 的上下文
-const SidePanel = () => {
-  return (
-    <>
-      <MantineProvider theme={theme} defaultColorScheme="auto">
-        <Toaster position="top-right" />
-        <SidePanelContent />
-      </MantineProvider>
-    </>
-  )
-}
+// ========================================================================
+// 最终的页面包装器
+// ========================================================================
+const theme = createTheme({})
+
+const SidePanel = () => (
+  <MantineProvider theme={theme} defaultColorScheme="auto">
+    <Toaster position="top-right" />
+    <SidePanelContent />
+  </MantineProvider>
+)
 
 export default SidePanel

@@ -25,5 +25,22 @@
     # ***客户任务 start***
     \${userPrompt} 
     # ***客户任务 end***
-    `.trim()
+    `.trim(),
+    fields: [
+        { 
+          id: 'field-1', name: '上下文', key: 'context', description: '在此输入上下文，或选择文件夹',
+          canSelectFile: true,  // 默认开启“选择文件夹”
+          canOptimize: true,    // 默认开启“优化”
+        },
+        { 
+          id: 'field-2', name: '需求 PRD', key: 'prd', description: '',
+          canSelectFile: false, // 默认关闭
+          canOptimize: true,    // 默认开启
+        },
+        { 
+          id: 'field-3', name: '设计文档', key: 'designDoc', description: '',
+          canSelectFile: false, // 默认关闭
+          canOptimize: true,    // 默认开启
+        },
+      ],
 }
