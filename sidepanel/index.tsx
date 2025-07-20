@@ -31,16 +31,18 @@ import {
 import {
   IconBackspace,
   IconFile,
+  IconFolderOpen,
   IconHistory,
   IconPlus,
   IconSend,
   IconTrash
 } from "@tabler/icons-react"
+import dayjs from "dayjs"
 import toast, { Toaster } from "react-hot-toast"
 
-import dayjs from "dayjs"
-
 import { DEFAULT_TEMPLATE } from "~config"
+
+import { EditableCard } from "./EditableCard"
 
 // 定义历史记录条目的类型
 interface HistoryEntry {
@@ -92,7 +94,7 @@ async function sendDataToAiTab(
         .sendMessage(targetTab.id, {
           type: "FILL_AND_SUBMIT",
           data: data,
-          title:  userPrompt
+          title: userPrompt
         })
         .then((res) => {
           console.log("data::", res)
@@ -205,12 +207,18 @@ function SidePanelContent() {
       if (userPrompt) {
         title = userPrompt?.substring(0, 10)
       }
-      setHistory(( per ) => [ {
-        title,
-        timestamp: dayjs().format('YYYY-MM-DD HH:mm:ss'),
-        mode,
-        url,
-      }, ...per].slice(0, 50) as any[])
+      setHistory(
+        (per) =>
+          [
+            {
+              title,
+              timestamp: dayjs().format("YYYY-MM-DD HH:mm:ss"),
+              mode,
+              url
+            },
+            ...per
+          ].slice(0, 50) as any[]
+      )
     }
   }
   const restoreFromHistory = (entry: HistoryEntry) => {
@@ -267,85 +275,61 @@ function SidePanelContent() {
 
         <AppShell.Main>
           <Stack gap="lg">
-            <Card shadow="sm" padding="lg" radius="md" withBorder>
-              <Card.Section withBorder inheritPadding py="xs">
-                <Group justify="space-between">
-                  <Text fw={500}>资源&规范(CONTEXT)</Text>
-                  <Group gap="xs">
-                    <ActionIcon
-                      variant="default"
-                      size="sm"
-                      title="清除"
-                      onClick={() => setContext("")}>
-                      <IconBackspace style={{ width: "70%" }} />
-                    </ActionIcon>
-                    <ActionIcon
-                      variant="default"
-                      onClick={() => fileInputRef.current?.click()}>
-                      <IconFile />
-                    </ActionIcon>
-                    <input
+            <EditableCard
+              title="资源&规范(CONTEXT)"
+              description="在此输入上下文，或选择文件夹"
+              value={context}
+              onValueChange={setContext}
+              onClear={() => setContext("")}
+              optimizing={false}
+              onZoom={() => {}}>
+              {/* 这里可以传入一个“选择文件夹”的按钮作为 children */}
+              <ActionIcon
+                variant="default"
+                size="sm"
+                onClick={() => fileInputRef.current?.click()}>
+                <IconFolderOpen style={{ width: "70%" }} />
+                <input
                       type="file"
                       ref={fileInputRef}
                       style={{ display: "none" }}
                       multiple
                       onChange={handleFolderSelect}
                     />
-                  </Group>
-                </Group>
-              </Card.Section>
-              <Textarea
-                mt="md"
-                placeholder="在此输入上下文，或选择文件"
-                autosize
-                minRows={4}
-                maxRows={4}
-                value={context}
-                onChange={(e) => setContext(e.currentTarget.value)}
-              />
-            </Card>
+              </ActionIcon>
+            </EditableCard>
 
-            <Card shadow="sm" padding="lg" radius="md" withBorder>
-              <Group justify="space-between">
-                <Text fw={500}>需求 (PRD)</Text>
-                <ActionIcon
-                  variant="default"
-                  size="sm"
-                  title="清除"
-                  onClick={() => setPrd("")}>
-                  <IconBackspace style={{ width: "70%" }} />
-                </ActionIcon>
-              </Group>
-              <Textarea
-                mt="sm"
-                autosize
-                minRows={4}
-                maxRows={4}
-                value={prd}
-                onChange={(e) => setPrd(e.currentTarget.value)}
-              />
-            </Card>
+      
 
-            <Card shadow="sm" padding="lg" radius="md" withBorder>
-              <Group justify="space-between">
-                <Text fw={500}>接口设计 (API)</Text>
-                <ActionIcon
-                  variant="default"
-                  size="sm"
-                  title="清除"
-                  onClick={() => setDesignDoc("")}>
-                  <IconBackspace style={{ width: "70%" }} />
-                </ActionIcon>
-              </Group>
-              <Textarea
-                mt="sm"
-                autosize
-                minRows={4}
-                maxRows={4}
-                value={designDoc}
-                onChange={(e) => setDesignDoc(e.currentTarget.value)}
-              />
-            </Card>
+            <EditableCard
+              title="需求(PRD)"
+              description="在此输入需求内容、或者在网页后选择右击点击(Spec2 code)菜单"
+              value={prd}
+              onValueChange={setPrd}
+              onClear={() => setPrd("")}
+              optimizing={true}
+              onZoom={() => {}}>
+              {/* 这里可以传入一个“选择文件夹”的按钮作为 children */}
+          
+            </EditableCard>
+
+
+
+       
+
+            <EditableCard
+              title="接口文档(API)"
+              description="在此输入接口文档、或者在网页后选择右击点击(Spec2 code)菜单"
+              value={designDoc}
+              onValueChange={setDesignDoc}
+              onClear={() => setDesignDoc("")}
+              optimizing={true}
+              onZoom={() => {}}>
+              {/* 这里可以传入一个“选择文件夹”的按钮作为 children */}
+          
+            </EditableCard>
+
+         
 
             <Divider my="xs" label="客户任务(TASK)" labelPosition="center" />
 
